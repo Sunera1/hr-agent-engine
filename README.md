@@ -17,6 +17,8 @@ Supported intents:
 
 ## Setup
 
+Requires Python 3.11 or newer.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -24,7 +26,14 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-The default `.env.example` enables `MOCK_LLM=true`, so no real API key is required.
+The default `.env.example` enables `MOCK_LLM=true`, so no paid API key is required for local testing. The project still includes an OpenAI-compatible provider abstraction. To connect a real LLM API or compatible open-source model server later, set `MOCK_LLM=false`, add an `OPENAI_API_KEY`, and adjust `OPENAI_BASE_URL` and `LLM_MODEL` if needed.
+
+Useful configuration values:
+
+- `DATABASE_URL` controls the SQLite database path.
+- `REQUEST_TIMEOUT_SECONDS` limits each orchestration attempt.
+- `AGENT_RETRY_ATTEMPTS` controls simple retry behavior for failed workflow attempts.
+- `STM_LIMIT` and `LTM_SIGNIFICANCE_THRESHOLD` control memory behavior.
 
 ## Run
 
@@ -99,6 +108,7 @@ curl.exe -X DELETE http://127.0.0.1:8000/memory
 - SQLite is sufficient for the assessment scope.
 - The classifier is deterministic and keyword-based for repeatable testing.
 - The mock LLM provider is the default so the app runs without paid API keys.
+- A real LLM API or compatible local model can be connected through `.env` settings, but it is not required for the assessment tests.
 
 ## Testing
 

@@ -40,16 +40,18 @@ class OrchestratorAgent:
     def _build_provider(self) -> LLMProvider:
         if self._settings.mock_llm or not self._settings.openai_api_key:
             return MockLLMProvider()
-        return OpenAICompatibleProvider(api_key=self._settings.openai_api_key)
+        return OpenAICompatibleProvider(
+            api_key=self._settings.openai_api_key,
+            base_url=self._settings.openai_base_url,
+            model=self._settings.llm_model,
+            timeout_seconds=self._settings.request_timeout_seconds,
+        )
 
     async def handle_request(self, request_id: int, user_id: str, message: str) -> OrchestrationResult:
-        """Execute the workflow with timeout handling and a user-safe fallback."""
+        """Execute the workflow with retry, timeout handling, and a user-safe fallback."""
 
         try:
-            state = await asyncio.wait_for(
-                asyncio.to_thread(self._workflow.run, user_id, message),
-                timeout=self._settings.request_timeout_seconds,
-            )
+            state = await self._run_with_retries(user_id, message)
             classification = state["classification"]
             return OrchestrationResult(
                 request_id=request_id,
@@ -63,3 +65,24 @@ class OrchestratorAgent:
             )
         except Exception as exc:  # pragma: no cover - orchestration fallback path
             raise AgentExecutionError("The request could not be processed right now.") from exc
+
+    async def _run_with_retries(self, user_id: str, message: str) -> dict[str, object]:
+        max_attempts = max(1, self._settings.agent_retry_attempts + 1)
+        last_error: Exception | None = None
+
+        for attempt in range(max_attempts):
+            try:
+                state = await asyncio.wait_for(
+                    asyncio.to_thread(self._workflow.run, user_id, message),
+                    timeout=self._settings.request_timeout_seconds,
+                )
+                if state.get("status") != "error" or attempt == max_attempts - 1:
+                    return state
+            except Exception as exc:
+                last_error = exc
+                if attempt == max_attempts - 1:
+                    raise
+
+        if last_error:
+            raise last_error
+        raise AgentExecutionError("The request could not be processed right now.")

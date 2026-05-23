@@ -111,7 +111,7 @@ class RequestWorkflow:
 
     def _save_memory(self, state: WorkflowState) -> WorkflowState:
         classification = state.get("classification")
-        if not classification:
+        if not classification or state.get("status") == "error":
             return state
         significance = self._memory_service.compute_significance(state["message"], classification.intent, classification.confidence)
         memory_context = self._memory_service.store_request_summary(

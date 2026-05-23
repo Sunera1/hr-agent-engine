@@ -28,7 +28,7 @@ The LangGraph workflow follows this sequence:
 4. Save memory and compute significance.
 5. Return the structured response.
 
-The orchestrator is the top-level entry point. The specialized agents are small and deterministic, with a mock LLM provider used to keep the prototype runnable without external keys.
+The orchestrator is the top-level entry point. The specialized agents are small and deterministic, with a mock LLM provider used to keep the prototype runnable without external keys. A real OpenAI-compatible API or compatible local model server can be connected later through `.env` settings such as `MOCK_LLM`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`.
 
 Supported routing targets are:
 
@@ -60,11 +60,15 @@ If the final score meets or exceeds `LTM_SIGNIFICANCE_THRESHOLD`, the memory ite
 
 ## Audit Log Design
 
-Audit rows are append-only and stored in SQLite. Each request creates an initial `started` entry and then a final success or error entry. Failures are logged with user-safe messages instead of stack traces. This makes it possible to inspect what happened without allowing the audit endpoint to modify previous records.
+Audit rows are append-only and stored in SQLite. Each request creates an initial `started` entry and then a final success or error entry. The code only exposes append and read operations for audit records, and SQLite triggers prevent direct update or delete operations on the `audit_log` table.
 
-## Failure Handling
+Each audit row stores `id`, `timestamp`, `user_id`, `request_text`, `classified_intent`, `confidence`, `routed_agent`, `memory_used`, `response_text`, `status`, and `error_message`.
 
-The API catches workflow errors and returns a controlled error response. A scheduling request containing `force failure` is included so the fallback path can be tested locally. The mock LLM provider is enabled by default, so tests and endpoint checks do not depend on an external API.
+## Retry, Timeout, and Fallback Handling
+
+The orchestrator wraps workflow execution with `asyncio.wait_for`, using `REQUEST_TIMEOUT_SECONDS` from `.env`. It also supports a small retry loop through `AGENT_RETRY_ATTEMPTS`. This keeps the behavior easy to follow while still covering transient workflow failures.
+
+Low-confidence classification is routed to the clarification agent instead of guessing. Other workflow errors return a polite fallback response and are written to the audit log without exposing raw Python stack traces. A scheduling request containing `force failure` is included so the fallback path can be tested locally. The mock LLM provider is enabled by default, so tests and endpoint checks do not depend on an external API.
 
 ## Trade-offs
 
@@ -80,6 +84,7 @@ The API catches workflow errors and returns a controlled error response. A sched
 - The OpenAI-compatible provider is optional and not required for tests.
 - The routing behavior is based on keywords and simple confidence heuristics.
 - The audit and memory endpoints are not protected by authentication in this prototype.
+- Depending on installed LangGraph/LangChain package versions, tests may show a non-blocking dependency warning. This does not affect the required API functionality or passing test results.
 
 ## Future Improvements
 
@@ -88,6 +93,18 @@ The API catches workflow errors and returns a controlled error response. A sched
 - Add pagination to audit and memory endpoints.
 - Add role-based access control.
 - Expand observability with structured logging and metrics.
+
+## Bug Finding and Fixes
+
+No separate starter code was present in this repository, so the checks focused on integration issues in the completed prototype. I verified imports, database initialization, endpoint names, FastAPI docs behavior, safe error handling, and the test suite.
+
+Issues found and fixed during cleanup:
+
+- Added `pytest.ini` so tests can import the local `app` package reliably.
+- Added environment settings for `OPENAI_BASE_URL`, `LLM_MODEL`, and `AGENT_RETRY_ATTEMPTS`.
+- Added simple retry handling around the LangGraph workflow.
+- Added SQLite triggers to enforce append-only audit rows.
+- Updated README and report wording so setup, endpoint coverage, LLM behavior, and limitations match the assessment requirements.
 
 ## Submission Note
 

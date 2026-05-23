@@ -66,5 +66,5 @@ class ShortTermMemoryRepository:
         overflow = rows[self._settings.stm_limit :]
         if overflow:
             ids = [row["id"] for row in overflow]
-            placeholders = ",".join("?" for _ in ids)
-            connection.execute(f"DELETE FROM memory_entries WHERE id IN ({placeholders})", ids)
+            bind_markers = ",".join("?" for _ in ids)
+            connection.execute(f"DELETE FROM memory_entries WHERE id IN ({bind_markers})", ids)
